@@ -5,16 +5,17 @@ require "tmpdir"
 
 class PgbackupsArchive::Job
 
-  attr_reader :client
+  attr_reader :client, :attrs
   attr_accessor :backup_url, :created_at
 
-  def self.call
-    new.call
+  def self.call(attrs={})
+    new(attrs).call
   end
 
   def initialize(attrs={})
     Heroku::Command.load
-    @client = Heroku::Command::Pg.new([], :app => ENV["PGBACKUPS_APP"])
+    @attrs = attrs
+    @client = Heroku::Command::Pg.new([], :app => app_name)
   end
 
   def call
@@ -26,7 +27,7 @@ class PgbackupsArchive::Job
   end
 
   def archive
-    if PgbackupsArchive::Storage.new(key, file).store
+    if PgbackupsArchive::Storage.new(key, file, @attrs).store
       client.display "Backup archived"
     end
   end
@@ -39,7 +40,7 @@ class PgbackupsArchive::Job
     self.created_at = backup[:created_at]
 
     self.backup_url = Heroku::Client::HerokuPostgresqlApp
-      .new(ENV["PGBACKUPS_APP"]).transfers_public_url(backup[:num])[:url]
+      .new(app_name).transfers_public_url(backup[:num])[:url]
   end
 
   def delete
@@ -60,7 +61,7 @@ class PgbackupsArchive::Job
   end
 
   def expire
-    transfers = client.send(:hpg_app_client, ENV["PGBACKUPS_APP"]).transfers
+    transfers = client.send(:hpg_app_client, app_name).transfers
       .select  { |b| b[:from_type] == "pg_dump" && b[:to_type] == "gof3r" }
       .sort_by { |b| b[:created_at] }
 
@@ -77,7 +78,7 @@ class PgbackupsArchive::Job
   private
 
   def expire_backup(backup_num)
-    client.send(:hpg_app_client, ENV["PGBACKUPS_APP"])
+    client.send(:hpg_app_client, app_name)
       .transfers_delete(backup_num)
   end
 
@@ -94,8 +95,8 @@ class PgbackupsArchive::Job
   end
 
   def key
-    timestamp = created_at.gsub(/\/|\:|\.|\s/, "-").concat(".dump")
-    ["pgbackups", environment, timestamp].compact.join("/")
+    timestamp = created_at.gsub(/\/|\:|\.|\s\+/, "-").concat(".dump")
+    ["backups", "pgbackups", timestamp].compact.join("/")
   end
 
   def pgbackups_to_keep
@@ -104,6 +105,10 @@ class PgbackupsArchive::Job
 
   def temp_file
     "#{Dir.tmpdir}/pgbackup"
+  end
+
+  def app_name
+    @attrs[:app_name] || ENV["PGBACKUPS_APP"]
   end
 
 end
