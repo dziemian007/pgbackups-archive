@@ -2,6 +2,8 @@ require "heroku/command/pg"
 require "heroku/command/pg_backups"
 require "heroku/api"
 require "tmpdir"
+require "active_support/message_encryptor"
+require "active_support/key_generator"
 
 class PgbackupsArchive::Job
 
@@ -22,6 +24,7 @@ class PgbackupsArchive::Job
     # expire  # Disabled b/c Heroku seems to be keeping only 2 on its own
     capture
     download
+    encrypt
     archive
     delete
   end
@@ -58,6 +61,15 @@ class PgbackupsArchive::Job
         :response_block    => streamer,
         :omit_default_port => true
     end
+  end
+
+  def encrypt
+    return unless @attrs[:enc_password].present? && @attrs[:enc_salt].present?
+
+    key = ActiveSupport::KeyGenerator.new(@attrs[:enc_password]).generate_key(@attrs[:enc_salt])
+    crypt = ActiveSupport::MessageEncryptor.new(key)
+    encrypted_data = crypt.encrypt_and_sign(File.read(temp_file))
+    File.open(temp_file, "w") { |output| output.write encrypted_data }
   end
 
   def expire

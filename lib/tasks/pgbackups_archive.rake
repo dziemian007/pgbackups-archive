@@ -8,7 +8,9 @@ namespace :pgbackups do
       aws_access_key_id: ENV['S3_KEY'],
       aws_secret_access_key: ENV['S3_SECRET'],
       aws_bucket: ENV['S3_BUCKET_NAME'],
-      aws_region: 'eu-west-1'
+      aws_region: 'eu-west-1',
+      enc_password: ENV['BACKUP_PASSWORD'],
+      enc_salt: ENV['BACKUP_SALT']
     })
   end
 
